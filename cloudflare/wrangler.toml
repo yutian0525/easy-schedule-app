@@ -1,0 +1,13 @@
+# cloudflare/wrangler.toml
+name = "schedule-share"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+routes = [
+  { pattern = "schedule-app.rayni.xyz", custom_domain = true }
+]
+
+[[kv_namespaces]]
+binding = "SCHEDULE_KV"
+id = "e9a87ba8755846bdb246b6285a0501f8"
+preview_id = "e9a87ba8755846bdb246b6285a0501f8"
