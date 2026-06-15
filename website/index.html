@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>简白课表 · 把一整周装进一张干净的课表</title>
+<link rel="icon" type="image/png" href="pic/icon.png" />
+<meta name="description" content="简白课表 — 一款专为学生设计的轻量课程表 App。今日课程实时状态、周课表网格、多课表切换、AI 导入、上课提醒，全部本地存储，开源免费。" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#FAFAFB;
+    --bg-grid:#F1F0F4;
+    --ink:#1A1A2E;
+    --muted:#6B6B7B;
+    --faint:#A5A5A5;
+    --line:#ECECEF;
+
+    --purple:#6454AB;
+    --purple-d:#4F4191;
+    --purple-l:#8B7DC4;
+    --purple-fill:#EDE9F7;
+
+    --coral:#E15B4C;
+
+    /* course card palette — straight from the app */
+    --c-green-bar:#7BB47C;   --c-green-bg:#E9F3E7;
+    --c-blue-bar:#7AA7D8;    --c-blue-bg:#E1ECF7;
+    --c-rose-bar:#D87A93;    --c-rose-bg:#F7E1E8;
+    --c-amber-bar:#C9A86A;   --c-amber-bg:#F4ECD9;
+    --c-lilac-bar:#9B86C9;   --c-lilac-bg:#ECE5F7;
+    --c-teal-bar:#6FB3B0;    --c-teal-bg:#E0F0EF;
+
+    --display:'Space Grotesk', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    --mono:'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+    --sans:'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+    --maxw:1140px;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:16px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    overflow-x:hidden;
+  }
+  a{color:inherit;text-decoration:none;}
+  img{display:block;max-width:100%;}
+  ::selection{background:var(--purple-fill);color:var(--purple-d);}
+
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px;}
+
+  /* mono utility — times & period numbers */
+  .mono{font-family:var(--mono);font-feature-settings:"tnum" 1;letter-spacing:-.01em;}
+
+  /* ============ NAV ============ */
+  header.nav{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:saturate(180%) blur(14px);
+    background:rgba(250,250,251,.78);
+    border-bottom:1px solid transparent;
+    transition:border-color .3s;
+  }
+  header.nav.scrolled{border-bottom-color:var(--line);}
+  .nav-inner{display:flex;align-items:center;justify-content:space-between;height:68px;}
+  .brand{display:flex;align-items:center;gap:11px;font-family:var(--display);font-weight:600;font-size:18px;letter-spacing:-.01em;}
+  .brand .glyph{
+    width:32px;height:32px;border-radius:9px;flex:0 0 auto;display:block;
+    box-shadow:0 4px 12px rgba(100,84,171,.18);
+    background:#fff;border:1px solid var(--line);
+  }
+  .nav-links{display:flex;align-items:center;gap:26px;}
+  .nav-links a.txt{font-size:14.5px;color:var(--muted);transition:color .2s;}
+  .nav-links a.txt:hover{color:var(--ink);}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:var(--sans);font-size:14.5px;font-weight:600;
+    padding:10px 18px;border-radius:11px;border:1px solid transparent;
+    cursor:pointer;transition:transform .18s, box-shadow .22s, background .2s;
+    white-space:nowrap;
+  }
+  .btn-primary{background:var(--purple);color:#fff;box-shadow:0 6px 18px rgba(100,84,171,.30);}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 26px rgba(100,84,171,.40);}
+  .btn-ghost{background:#fff;border-color:var(--line);color:var(--ink);}
+  .btn-ghost:hover{border-color:var(--purple-l);color:var(--purple-d);}
+  .btn svg{width:17px;height:17px;}
+
+  @media(max-width:720px){.nav-links a.txt{display:none;}}
+
+  /* ============ HERO ============ */
+  .hero{position:relative;padding:74px 0 40px;}
+  /* faint timetable grid backdrop */
+  .grid-bg{
+    position:absolute;inset:0;z-index:0;pointer-events:none;
+    background-image:
+      linear-gradient(var(--bg-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+    background-size:100% 70px, 20% 70px;
+    -webkit-mask-image:radial-gradient(120% 90% at 30% 0%, #000 38%, transparent 78%);
+            mask-image:radial-gradient(120% 90% at 30% 0%, #000 38%, transparent 78%);
+    opacity:.9;
+  }
+  .hero-grid{position:relative;z-index:1;display:grid;grid-template-columns:1.05fr .95fr;gap:46px;align-items:center;}
+
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:9px;
+    font-family:var(--mono);font-size:12.5px;font-weight:500;letter-spacing:.02em;
+    color:var(--purple-d);background:var(--purple-fill);
+    padding:6px 13px;border-radius:99px;margin-bottom:24px;
+  }
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--coral);position:relative;}
+  .eyebrow .dot::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:1.5px solid var(--coral);opacity:.5;animation:pulse 2.2s ease-out infinite;}
+  @keyframes pulse{0%{transform:scale(.6);opacity:.55;}70%{transform:scale(1.5);opacity:0;}100%{opacity:0;}}
+
+  h1.title{
+    font-family:var(--display);font-weight:700;
+    font-size:clamp(38px,5.4vw,62px);line-height:1.06;letter-spacing:-.022em;
+    margin:0 0 22px;
+  }
+  h1.title .accent{color:var(--purple);}
+  h1.title .tilt{display:inline-block;color:var(--coral);}
+  .lede{font-size:clamp(16px,1.4vw,18.5px);color:var(--muted);max-width:30em;margin:0 0 32px;line-height:1.72;}
+  .cta-row{display:flex;flex-wrap:wrap;gap:14px;align-items:center;}
+  .btn-lg{padding:14px 26px;font-size:15.5px;border-radius:13px;}
+  .cta-note{font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:18px;letter-spacing:-.01em;}
+
+  /* phone */
+  .phone-stage{position:relative;display:flex;justify-content:center;}
+  .phone{
+    position:relative;width:300px;border-radius:42px;padding:11px;
+    background:linear-gradient(150deg,#2a2738,#14121d);
+    box-shadow:0 40px 80px -20px rgba(40,30,80,.40), 0 8px 22px rgba(40,30,80,.16);
+  }
+  .phone .screen{border-radius:32px;overflow:hidden;background:#fff;position:relative;}
+  .phone .notch{position:absolute;top:0;left:50%;transform:translateX(-50%);width:120px;height:26px;background:#14121d;border-radius:0 0 16px 16px;z-index:3;}
+  .phone img{width:100%;display:block;}
+  .hero .phone{transform:rotate(2deg);}
+
+  /* floating chip on hero phone */
+  .float-chip{
+    position:absolute;z-index:4;background:#fff;border-radius:14px;padding:11px 14px;
+    box-shadow:0 14px 34px rgba(40,30,80,.16);border:1px solid var(--line);
+    display:flex;align-items:center;gap:11px;
+  }
+  .float-chip.live{left:-34px;top:84px;}
+  .float-chip .live-dot{width:9px;height:9px;border-radius:50%;background:var(--coral);position:relative;flex:0 0 auto;}
+  .float-chip .live-dot::after{content:"";position:absolute;inset:-6px;border-radius:50%;border:1.6px solid var(--coral);opacity:.45;animation:pulse 2.2s ease-out infinite;}
+  .float-chip .ftxt b{display:block;font-size:13px;font-weight:600;}
+  .float-chip .ftxt span{font-size:11.5px;color:var(--faint);}
+  .float-chip.bell{right:-26px;bottom:96px;}
+  .float-chip.bell .ic{width:30px;height:30px;border-radius:9px;background:var(--purple-fill);display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .float-chip.bell svg{width:17px;height:17px;color:var(--purple);}
+
+  @media(max-width:900px){
+    .hero-grid{grid-template-columns:1fr;gap:46px;}
+    .phone-stage{order:-1;}
+    .float-chip.live{left:0;} .float-chip.bell{right:0;}
+  }
+
+  /* ============ MARQUEE / values band ============ */
+  .band{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:#fff;}
+  .band-inner{display:flex;flex-wrap:wrap;gap:10px 34px;justify-content:center;align-items:center;padding:20px 28px;}
+  .band-item{display:flex;align-items:center;gap:9px;font-size:14px;color:var(--muted);}
+  .band-item svg{width:16px;height:16px;color:var(--purple);flex:0 0 auto;}
+  .band-item b{color:var(--ink);font-weight:600;}
+
+  /* ============ section scaffolding ============ */
+  section.block{padding:96px 0;position:relative;}
+  .sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:48px;}
+  .sec-head .l{max-width:40em;}
+  .kicker{
+    font-family:var(--mono);font-size:12.5px;font-weight:500;color:var(--purple);
+    letter-spacing:.04em;display:flex;align-items:center;gap:10px;margin-bottom:16px;
+  }
+  .kicker .num{background:var(--purple-fill);color:var(--purple-d);padding:2px 9px;border-radius:6px;}
+  h2.sec-title{font-family:var(--display);font-weight:600;font-size:clamp(27px,3.4vw,40px);line-height:1.12;letter-spacing:-.02em;margin:0 0 14px;}
+  .sec-sub{color:var(--muted);font-size:16px;max-width:34em;margin:0;}
+
+  /* ============ FEATURES as a timetable ============ */
+  .timetable{
+    display:grid;
+    grid-template-columns:56px repeat(3,1fr);
+    gap:14px;
+    align-items:stretch;
+  }
+  /* left period rail */
+  .rail{display:flex;flex-direction:column;gap:14px;padding-top:2px;}
+  .rail .slot{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:var(--faint);min-height:150px;
+  }
+  .rail .slot .pn{font-family:var(--display);font-weight:600;font-size:19px;color:var(--ink);}
+  .rail .slot .t{font-family:var(--mono);font-size:10.5px;line-height:1.5;text-align:center;margin-top:4px;}
+
+  .col{display:flex;flex-direction:column;gap:14px;}
+  .colhead{
+    text-align:center;font-size:13px;color:var(--faint);font-weight:600;padding-bottom:4px;
+    border-bottom:1px solid var(--line);margin-bottom:2px;
+  }
+  .colhead .wd{color:var(--ink);font-family:var(--display);font-size:15px;display:block;}
+
+  .course{
+    position:relative;border-radius:16px;padding:20px 20px 20px 22px;
+    min-height:150px;display:flex;flex-direction:column;
+    border:1px solid rgba(0,0,0,.03);
+    overflow:hidden;
+    opacity:0;transform:translateY(16px);
+    transition:transform .55s cubic-bezier(.2,.7,.2,1), opacity .55s, box-shadow .25s;
+  }
+  .course.in{opacity:1;transform:none;}
+  .course:hover{box-shadow:0 18px 38px -16px rgba(40,30,80,.30);transform:translateY(-3px);}
+  .course .bar{position:absolute;left:0;top:0;bottom:0;width:5px;}
+  .course .ic{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.6);display:flex;align-items:center;justify-content:center;margin-bottom:14px;}
+  .course .ic svg{width:19px;height:19px;}
+  .course h3{font-size:17px;font-weight:600;margin:0 0 7px;letter-spacing:-.01em;}
+  .course p{font-size:13.5px;color:var(--muted);margin:0;line-height:1.6;}
+  .course .meta{margin-top:auto;padding-top:14px;font-family:var(--mono);font-size:11px;color:var(--faint);letter-spacing:-.01em;}
+
+  /* color variants */
+  .cv-green .bar{background:var(--c-green-bar);} .cv-green{background:var(--c-green-bg);} .cv-green .ic svg,.cv-green h3{color:#3c7a3e;}
+  .cv-blue .bar{background:var(--c-blue-bar);}   .cv-blue{background:var(--c-blue-bg);}   .cv-blue .ic svg,.cv-blue h3{color:#3a6da8;}
+  .cv-rose .bar{background:var(--c-rose-bar);}   .cv-rose{background:var(--c-rose-bg);}   .cv-rose .ic svg,.cv-rose h3{color:#b04a66;}
+  .cv-amber .bar{background:var(--c-amber-bar);} .cv-amber{background:var(--c-amber-bg);} .cv-amber .ic svg,.cv-amber h3{color:#9a7a32;}
+  .cv-lilac .bar{background:var(--c-lilac-bar);} .cv-lilac{background:var(--c-lilac-bg);} .cv-lilac .ic svg,.cv-lilac h3{color:#6a52a8;}
+  .cv-teal .bar{background:var(--c-teal-bar);}   .cv-teal{background:var(--c-teal-bg);}   .cv-teal .ic svg,.cv-teal h3{color:#33807d;}
+  .course .ic{background:rgba(255,255,255,.65);}
+
+  @media(max-width:860px){
+    .timetable{grid-template-columns:1fr 1fr;}
+    .rail,.colhead{display:none;}
+    .col{display:contents;}
+  }
+  @media(max-width:540px){.timetable{grid-template-columns:1fr;}.course{min-height:0;}}
+
+  /* ============ SHOWCASE ============ */
+  .showcase{background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line);}
+  .shot-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:26px;align-items:start;}
+  .shot{display:flex;flex-direction:column;gap:18px;}
+  .shot .phone{width:100%;transform:none;}
+  .shot .phone .notch{width:34%;height:5.5%;}
+  .shot .cap{padding:0 4px;}
+  .shot .cap .tag{font-family:var(--mono);font-size:11px;color:var(--purple);letter-spacing:.02em;}
+  .shot .cap h4{font-size:15.5px;font-weight:600;margin:6px 0 5px;}
+  .shot .cap p{font-size:13px;color:var(--muted);margin:0;line-height:1.6;}
+  @media(max-width:920px){.shot-grid{grid-template-columns:repeat(2,1fr);gap:30px 24px;}}
+  @media(max-width:520px){.shot-grid{grid-template-columns:1fr;max-width:320px;margin:0 auto;}}
+
+  /* ============ AI STEPS (true sequence) ============ */
+  .steps{display:grid;grid-template-columns:1.1fr 1fr;gap:54px;align-items:center;}
+  .step-list{display:flex;flex-direction:column;gap:8px;}
+  .step{display:flex;gap:20px;padding:22px 0;border-bottom:1px dashed var(--line);}
+  .step:last-child{border-bottom:none;}
+  .step .sn{
+    font-family:var(--mono);font-weight:700;font-size:14px;color:var(--purple-d);
+    background:var(--purple-fill);width:34px;height:34px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;flex:0 0 auto;
+  }
+  .step .sc h4{font-size:17px;font-weight:600;margin:4px 0 6px;}
+  .step .sc p{font-size:14px;color:var(--muted);margin:0;line-height:1.65;}
+  .step .sc code{font-family:var(--mono);font-size:12.5px;background:#fff;border:1px solid var(--line);padding:1px 6px;border-radius:5px;color:var(--purple-d);}
+  .steps .phone-stage .phone{transform:rotate(-2deg);}
+  @media(max-width:860px){.steps{grid-template-columns:1fr;gap:40px;}.steps .phone-stage{order:-1;}}
+
+  /* ============ CTA ============ */
+  .cta-final{position:relative;overflow:hidden;background:var(--purple);color:#fff;border-radius:28px;padding:64px 40px;text-align:center;}
+  .cta-final::before{
+    content:"";position:absolute;inset:0;opacity:.16;pointer-events:none;
+    background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);
+    background-size:64px 64px;
+    -webkit-mask-image:radial-gradient(80% 120% at 50% -10%,#000,transparent 70%);
+            mask-image:radial-gradient(80% 120% at 50% -10%,#000,transparent 70%);
+  }
+  .cta-final .inner{position:relative;z-index:1;}
+  .cta-final h2{font-family:var(--display);font-weight:700;font-size:clamp(28px,3.6vw,42px);letter-spacing:-.02em;margin:0 0 16px;}
+  .cta-final p{color:rgba(255,255,255,.82);font-size:16.5px;max-width:30em;margin:0 auto 32px;}
+  .cta-final .btn-primary{background:#fff;color:var(--purple-d);box-shadow:0 10px 30px rgba(0,0,0,.22);}
+  .cta-final .btn-primary:hover{transform:translateY(-2px);box-shadow:0 16px 38px rgba(0,0,0,.30);}
+  .cta-final .btn-ghost{background:transparent;border-color:rgba(255,255,255,.4);color:#fff;}
+  .cta-final .btn-ghost:hover{border-color:#fff;color:#fff;}
+  .cta-final .cta-row{justify-content:center;}
+
+  /* ============ FOOTER ============ */
+  footer{padding:48px 0 60px;}
+  .foot-inner{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between;}
+  .foot-inner .brand{font-size:16px;}
+  .foot-meta{font-size:13px;color:var(--faint);display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;}
+  .foot-meta a{color:var(--muted);}
+  .foot-meta a:hover{color:var(--purple);}
+
+  @media(prefers-reduced-motion:reduce){
+    *{animation:none !important;}
+    .course{opacity:1 !important;transform:none !important;transition:none;}
+    html{scroll-behavior:auto;}
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<header class="nav" id="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top"><img class="glyph" src="pic/icon.png" alt="简白课表 logo" />简白课表</a>
+    <nav class="nav-links">
+      <a class="txt" href="#features">功能</a>
+      <a class="txt" href="#screens">界面</a>
+      <a class="txt" href="#import">AI 导入</a>
+      <a class="txt" href="https://github.com/yutian0525/easy-schedule-app" target="_blank" rel="noopener">开源</a>
+      <a class="btn btn-primary" href="https://github.com/yutian0525/easy-schedule-app/releases" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+        下载
+      </a>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero" id="top">
+  <div class="grid-bg"></div>
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <span class="eyebrow"><span class="dot"></span>开源 · 本地优先 · 无需登录</span>
+      <h1 class="title">把一整周的课<br>装进一张<span class="accent">干净的课表</span></h1>
+      <p class="lede">今日课程实时倒计时、周课表网格、多课表一键切换、上课前提醒——专为学生打造的轻量课程表。数据全部存在你的手机里。</p>
+      <div class="cta-row">
+        <a class="btn btn-primary btn-lg" href="https://github.com/yutian0525/easy-schedule-app/releases" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+          下载 App
+        </a>
+        <a class="btn btn-ghost btn-lg" href="https://github.com/yutian0525/easy-schedule-app" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.8 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 016 0C17.3 4.7 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.5-2.7 5.5-5.3 5.8.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6a11.5 11.5 0 007.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+          在 GitHub 查看
+        </a>
+      </div>
+      <p class="cta-note">// React Native + Expo · Android · 免费（iOS 暂未支持）</p>
+    </div>
+
+    <div class="phone-stage">
+      <div class="float-chip live">
+        <span class="live-dot"></span>
+        <span class="ftxt"><b>线性代数 进行中</b><span>还有 36 分钟下课</span></span>
+      </div>
+      <div class="float-chip bell">
+        <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></span>
+        <span class="ftxt"><b>上课提醒</b><span>提前 10 分钟</span></span>
+      </div>
+      <div class="phone">
+        <span class="notch"></span>
+        <div class="screen"><img src="pic/daily.png" alt="简白课表 今日课程界面" /></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- VALUES BAND -->
+<div class="band">
+  <div class="wrap band-inner">
+    <span class="band-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><b>本地存储</b>数据不上云</span>
+    <span class="band-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg><b>无需登录</b>开箱即用</span>
+    <span class="band-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 010 20M12 2a15 15 0 000 20"/></svg><b>完全开源</b>代码公开</span>
+    <span class="band-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/></svg><b>实时状态</b>课程倒计时</span>
+  </div>
+</div>
+
+<!-- FEATURES as timetable -->
+<section class="block" id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="l">
+        <div class="kicker"><span class="num">课表</span>FEATURES</div>
+        <h2 class="sec-title">每个功能，<br>都像一张排进格子的课</h2>
+        <p class="sec-sub">围绕"看课、排课、提醒"三件事，做到刚好够用。</p>
+      </div>
+    </div>
+
+    <div class="timetable" id="tt">
+      <!-- period rail -->
+      <div class="rail">
+        <div class="slot"><span class="pn mono">1</span><span class="t">08:15<br>09:50</span></div>
+        <div class="slot"><span class="pn mono">3</span><span class="t">10:05<br>11:40</span></div>
+      </div>
+
+      <div class="col">
+        <div class="colhead">周一<span class="wd">MON</span></div>
+        <article class="course cv-green" style="--d:0">
+          <div class="bar"></div>
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+          <h3>今日课程</h3>
+          <p>按上午 / 下午 / 晚上分组，实时计算未开始、进行中与剩余时间。</p>
+          <div class="meta">// LIVE STATUS</div>
+        </article>
+        <article class="course cv-rose" style="--d:1">
+          <div class="bar"></div>
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg></div>
+          <h3>上课提醒</h3>
+          <p>每节课前 10 分钟推送；每晚 21:00 推送次日课程摘要。</p>
+          <div class="meta">// PUSH · LOCAL</div>
+        </article>
+      </div>
+
+      <div class="col">
+        <div class="colhead">周三<span class="wd">WED</span></div>
+        <article class="course cv-blue" style="--d:2">
+          <div class="bar"></div>
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg></div>
+          <h3>周课表视图</h3>
+          <p>5 列 × 12 行网格，左右滑动无限切换周次，自动高亮今日。</p>
+          <div class="meta">// SWIPE WEEKS</div>
+        </article>
+        <article class="course cv-amber" style="--d:3">
+          <div class="bar"></div>
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-2.7 1.1V21a2 2 0 11-4 0v-.1a1.6 1.6 0 00-2.7-1.1l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00-1.1-2.7H3a2 2 0 110-4h.1A1.6 1.6 0 004.2 8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H9a1.6 1.6 0 001-1.5V4a2 2 0 114 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V9a1.6 1.6 0 001.5 1H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg></div>
+          <h3>个性化设置</h3>
+          <p>自定义每节课上下课时间、学期周数、开学日期与默认启动页。</p>
+          <div class="meta">// 12 PERIODS</div>
+        </article>
+      </div>
+
+      <div class="col">
+        <div class="colhead">周五<span class="wd">FRI</span></div>
+        <article class="course cv-lilac" style="--d:4">
+          <div class="bar"></div>
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="M16 10l6-3v10l-6-3"/></svg></div>
+          <h3>多课表切换</h3>
+          <p>创建、重命名、删除多个课表，一键切换；可设第二课表随时对照。</p>
+          <div class="meta">// MULTI · SECOND</div>
+        </article>
+        <article class="course cv-teal" style="--d:5">
+          <div class="bar"></div>
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg></div>
+          <h3>分享与 AI 导入</h3>
+          <p>8 位分享码互传课表；把课程截图发给 AI，粘贴 JSON 即可批量导入。</p>
+          <div class="meta">// SHARE CODE · AI</div>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SHOWCASE -->
+<section class="block showcase" id="screens">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="l">
+        <div class="kicker"><span class="num">界面</span>SCREENS</div>
+        <h2 class="sec-title">克制的紫，刚好的留白</h2>
+        <p class="sec-sub">真实截图。没有花哨装饰，只有看一眼就懂的课表。</p>
+      </div>
+    </div>
+
+    <div class="shot-grid">
+      <div class="shot">
+        <div class="phone"><span class="notch"></span><div class="screen"><img src="pic/daily.png" alt="今日课程"/></div></div>
+        <div class="cap"><span class="tag mono">// TODAY</span><h4>今日课程</h4><p>分时段排列，右侧显示距离上课还有多久。</p></div>
+      </div>
+      <div class="shot">
+        <div class="phone"><span class="notch"></span><div class="screen"><img src="pic/week.png" alt="周课表"/></div></div>
+        <div class="cap"><span class="tag mono">// WEEK</span><h4>周课表网格</h4><p>彩色课程卡按节次落格，滑动切换上下周。</p></div>
+      </div>
+      <div class="shot">
+        <div class="phone"><span class="notch"></span><div class="screen"><img src="pic/switch.png" alt="多课表切换"/></div></div>
+        <div class="cap"><span class="tag mono">// SWITCH</span><h4>多课表切换</h4><p>输入分享码导入，或在多张课表间一键切换。</p></div>
+      </div>
+      <div class="shot">
+        <div class="phone"><span class="notch"></span><div class="screen"><img src="pic/img4.png" alt="课程时间设置"/></div></div>
+        <div class="cap"><span class="tag mono">// SETTINGS</span><h4>节次时间设置</h4><p>逐节自定义上下课时间，支持 AI 一键生成。</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- AI IMPORT — a true 3-step sequence -->
+<section class="block" id="import">
+  <div class="wrap">
+    <div class="steps">
+      <div>
+        <div class="kicker"><span class="num">导入</span>AI IMPORT</div>
+        <h2 class="sec-title">不用一节一节手填</h2>
+        <p class="sec-sub" style="margin-bottom:14px;">把课表截图交给 AI，三步搬进 App，导入时自动检测时间冲突。</p>
+        <div class="step-list">
+          <div class="step">
+            <span class="sn">1</span>
+            <div class="sc"><h4>复制提示词</h4><p>在「课表编辑」里点 <code>复制提示词</code>，一段为本 App 写好的指令就在剪贴板里了。</p></div>
+          </div>
+          <div class="step">
+            <span class="sn">2</span>
+            <div class="sc"><h4>连同截图发给 AI</h4><p>把教务系统的课表截图和提示词一起发给任意大模型，它会吐出规范的 JSON。</p></div>
+          </div>
+          <div class="step">
+            <span class="sn">3</span>
+            <div class="sc"><h4>粘贴 JSON 导入</h4><p>点 <code>粘贴 JSON 导入</code>，课程批量入库，冲突的节次会被自动标出。</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-stage">
+        <div class="phone"><span class="notch"></span><div class="screen"><img src="pic/img5.png" alt="课表编辑与 AI 导入"/></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="block" style="padding-top:24px;">
+  <div class="wrap">
+    <div class="cta-final">
+      <div class="inner">
+        <h2>下一节课，准时知道</h2>
+        <p>免费、开源、本地优先。前往发布页下载，导入一次，整学期省心。</p>
+        <div class="cta-row">
+          <a class="btn btn-primary btn-lg" href="https://github.com/yutian0525/easy-schedule-app/releases" target="_blank" rel="noopener">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14"/></svg>
+            前往发布页下载
+          </a>
+          <a class="btn btn-ghost btn-lg" href="https://github.com/yutian0525/easy-schedule-app" target="_blank" rel="noopener">查看源代码</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap foot-inner">
+    <a class="brand" href="#top"><img class="glyph" src="pic/icon.png" alt="简白课表 logo" />简白课表</a>
+    <div class="foot-meta">
+      <span>© 2025 简白课表</span>
+      <a href="https://github.com/yutian0525/easy-schedule-app" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/yutian0525/easy-schedule-app/releases" target="_blank" rel="noopener">下载</a>
+      <span class="mono">React Native · Expo</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // nav border on scroll
+  const nav=document.getElementById('nav');
+  const onScroll=()=>nav.classList.toggle('scrolled',window.scrollY>8);
+  onScroll();window.addEventListener('scroll',onScroll,{passive:true});
+
+  // staggered reveal of course cards
+  const io=new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        const d=parseInt(e.target.style.getPropertyValue('--d')||0,10);
+        e.target.style.transitionDelay=(d*70)+'ms';
+        e.target.classList.add('in');
+        io.unobserve(e.target);
+      }
+    });
+  },{threshold:.18});
+  document.querySelectorAll('.course').forEach(c=>io.observe(c));
+</script>
+</body>
+</html>
