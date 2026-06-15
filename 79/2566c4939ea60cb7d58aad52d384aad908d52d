@@ -1,0 +1,27 @@
+app.json
+  h_71c0863b823da1 35
+utils/notificationService.ts
+  s_39ae9e91d5615e::t_e1d368a805cdb0 149-150
+  s_39ae9e91d5615e::t_537809decb4573 105-120,123-124,126-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "792566c4939ea60cb7d58aad52d384aad908d52d",
+  "prompts": {},
+  "humans": {
+    "h_71c0863b823da1": {
+      "author": "倪镭 <110873087+yutian0525@users.noreply.github.com>"
+    }
+  },
+  "sessions": {
+    "s_39ae9e91d5615e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a1837c3a-0472-434e-9fbf-cdf1637ded56",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "倪镭 <110873087+yutian0525@users.noreply.github.com>"
+    }
+  }
+}
