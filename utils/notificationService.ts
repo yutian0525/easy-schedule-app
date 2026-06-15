@@ -102,10 +102,35 @@ export async function cancelAllNotifications(): Promise<void> {
 }
 
 /**
- * 核心入口：取消所有旧通知，根据当前 state 重新调度接下来7天的通知。
- * 当两个开关均关闭时直接 cancel 并返回。
+ * 确保 Android 通知渠道已就绪。setNotificationChannelAsync 是幂等的，
+ * 在调度前 await 一次可消除「调度早于渠道创建」的竞态（缺陷2）。
  */
-export async function rescheduleAll(state: AppState): Promise<void> {
+async function ensureAndroidChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync('schedule', {
+    name: '课表提醒',
+    importance: Notifications.AndroidImportance.HIGH,
+    sound: 'default',
+  });
+}
+
+// 串行化锁：rescheduleAll 由数据监听和前台监听两处并发调用，
+// 若不串行化，后一次的 cancelAll 会清掉前一次刚调度的通知，导致间歇性漏发（缺陷1）。
+let rescheduleChain: Promise<void> = Promise.resolve();
+
+/**
+ * 核心入口：取消所有旧通知，根据当前 state 重新调度接下来7天的通知。
+ * 多次并发调用会被串行化排队，保证「cancelAll + 逐条调度」序列不被打断，
+ * 最终以最后一次调用的 state 为准。
+ */
+export function rescheduleAll(state: AppState): Promise<void> {
+  rescheduleChain = rescheduleChain
+    .catch(() => {}) // 前一次失败不阻塞后续调度
+    .then(() => rescheduleAllInner(state));
+  return rescheduleChain;
+}
+
+async function rescheduleAllInner(state: AppState): Promise<void> {
   const { notificationSettings, schedules, activeScheduleId } = state;
 
   // 两开关均关闭，直接清理
@@ -121,6 +146,8 @@ export async function rescheduleAll(state: AppState): Promise<void> {
   const semesterStart = new Date(startDate[0], startDate[1], startDate[2]);
   const [minWeek, maxWeek] = schedulePeriod;
 
+  // 先确保渠道就绪，再清理并重新调度（顺序保证消除竞态）
+  await ensureAndroidChannel();
   await cancelAllNotifications();
 
   const now = new Date();
